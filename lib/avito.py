@@ -9,8 +9,6 @@ import sys
 import os
 import logging
 
-from abc import ABC, abstractmethod
-
 import re
 from datetime import datetime as dt
 
@@ -26,7 +24,7 @@ from selenium.webdriver.firefox.options import FirefoxProfile
 # !pip install selenium
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
-class AvitoDownloader(ABC):
+class AvitoDownloader():
     
     def __init__(self,profile_path):
         self._options = Options()
@@ -41,7 +39,7 @@ class AvitoDownloader(ABC):
 
         driver.get(url)
         html = [ driver.page_source, ]
-        root = BeautifulSoup(html[0])
+        root = BeautifulSoup(html[0],'html.parser')
         pages = self._get_pages_count(root)
         if not(page_limit is None): pages = min(pages,page_limit+1)
         data = self._parse_page(root,npage=1)
@@ -49,11 +47,10 @@ class AvitoDownloader(ABC):
 
         logging.info('start read and parse pages...')
       
-        # for p in tqdm(range(2,4)):
         for p in tqdm(range(2,pages)):
             driver.get(url+f'&p={p}')
             html.append( driver.page_source )
-            root = BeautifulSoup(html[-1])
+            root = BeautifulSoup(html[-1],'html.parser')
             data.extend( self._parse_page( root, npage=p )  )
 
         driver.quit()    
@@ -64,9 +61,9 @@ class AvitoDownloader(ABC):
     def _parse_page(cls, root, npage):
         return [ cls._parse_item(tag)|{'avito_page':npage,} for tag in root.find_all('div',{'data-marker':'item'}) ]
         
-    @abstractmethod
-    def _parse_item(tag): pass
-    # def _parse_item(tag): return dict()
+    @staticmethod
+    def _parse_item(tag): 
+        return { 'text':tag.text,'html':str(tag), }
 
     @staticmethod
     def _get_pages_count(root):
@@ -125,11 +122,6 @@ class AvitoDownloaderRealty(AvitoDownloader):
         except:
             return ''        
 
-        
-# 'cur':tag.find('meta',attrs={'itemprop':'priceCurrency'}).attrs['content'],
-# tag.find('div',attrs={'data-marker':'item-address'}).text,           
-
-
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 class AvitoDataCleanerRealty:
     
@@ -145,6 +137,7 @@ class AvitoDataCleanerRealty:
             .str.extract( r'.*, ([\d,]+).*м²,.*',expand=False)
             .str.replace(',','.')
         )
+
         df['is_studio'] = df['title'].str.lower().str.match(r'.*студи.*')
         df['is_apartment'] = df['title'].str.lower().str.match(r'.*апартамент.*')
         df['is_part'] = df['title'].str.lower().str.match(r'.*дол.*')
@@ -164,14 +157,6 @@ class AvitoDataCleanerRealty:
                 .str.replace('пр-т','проспект')
             )
 
-        # df['is_fiolent'] = (
-        #    df['description'].str.lower().str.match('.*фиолент.*')
-        #    | df['adr'].str.lower().str.match('.*фиолент.*')
-        #)
-        # df[ df['adr'].str.match('.*СТ .*') ]
-        # df[ df['adr'].str.match('.*СНТ .*') ]
-        # df[ df['adr'].str.match('.*садов.*') ]
-        # df[ df['description'].str.match('.*садов.*') ]
         # df['avito_id'] = df['avito_id'].astype(int)
 
         df['price'] = df['price'].astype(int)
@@ -197,7 +182,6 @@ class AvitoDataCleanerRealty:
          'is_auction',
          'is_openspace',
          'is_SNT',
-         # 'is_fiolent',   
          'is_last_floor', 
          'is_roof',   
          'description',
