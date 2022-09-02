@@ -5,68 +5,92 @@
 #
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 
-import sys 
-import os
+# import sys 
+# import os
 import logging
 
 import re
-from datetime import datetime as dt
+# from datetime import datetime as dt
 
 from tqdm import tqdm
 import pandas as pd
 from bs4 import BeautifulSoup
 
-from selenium import webdriver
-from selenium.webdriver.firefox.options import Options
-from selenium.webdriver.firefox.options import FirefoxProfile
+# from .downloader import DownloaderSeleniumFirefox
 
+#from selenium import webdriver
+#from selenium.webdriver.firefox.options import Options
+#from selenium.webdriver.firefox.options import FirefoxProfile
 # !pacman -S firefox firefox-i18n-r  geckodriver
 # !pip install selenium
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 class AvitoDownloader():
     
-    def __init__(self,profile_path):
-        self._options = Options()
-        self._options.profile = FirefoxProfile(profile_path) 
-        self._options.headless = True
-        logging.info('downloader init')
-
-
-    def load(self,url,page_limit=None):         
-        driver = webdriver.Firefox(options=self._options)
-        logging.info('open virtual browser')
-
-        driver.get(url)
-        html = [ driver.page_source, ]
-        root = BeautifulSoup(html[0],'html.parser')
-        pages = self._get_pages_count(root)
-        if not(page_limit is None): pages = min(pages,page_limit+1)
-        data = self._parse_page(root,npage=1)
-        logging.info(f'{pages} pages for read')
-
-        logging.info('start read and parse pages...')
-      
-        for p in tqdm(range(2,pages)):
-            driver.get(url+f'&p={p}')
-            html.append( driver.page_source )
-            root = BeautifulSoup(html[-1],'html.parser')
-            data.extend( self._parse_page( root, npage=p )  )
-
-        driver.quit()    
+    def __init__(self,driver, base_url='https://www.avito.ru'):
+        self._base_url = base_url
+        self._driver = driver # ссылка на открытый браузер
+        self._html = [] # считанный "чистый" html
+        self._data = [] # данные извлечённые парсером из html
+        logging.info('AvitoDownloader: downloader init')
         
-        return pd.DataFrame(data).dropna(), html
+    # загрузить список объявлений Авито
+    # из раздела url_ext ( 'sevastopol/kvartiry/prodam' )
+    # не более page_limit страниц (если неопределенно то все страницы)
+    def load(self,avito_path,page_limit=None):  
+        try:
+            if re.match('^http.*',avito_path):
+                logging.warning('AvitoDownloader: incorrect avito_path')
+
+            url = self._base_url + '/' + avito_path + '?'
+            root = self._read_page(url) # читаем и парсим первую страницу списка объявлений
+
+            # считываем количество страниц, на которые поделен список объявлений
+            npages = self._get_pages_count(root,page_limit=page_limit)
+
+            # читаем и парсим оставшиеся страницы списка объявлений (начиная со второй)
+            logging.info('AvitoDownloader: start read and parse pages...')
+            for p in tqdm(range(2,npages+1)): 
+                self._read_page(url+f'&p={p}',npage=p) 
+                           
+        except Exception as e:
+            logging.error(e) # перехватываем и логируем описания возникших ошибок
+
+        finally: # завершение процесса чтения
+            return ( # выдаём список полученных объявлений и их исходный html
+                pd.DataFrame(self._data).dropna(), 
+                self._html,
+                )
+        
+    # читаем страницу Авито по url
+    def _read_page(self,url,npage=1): 
+        self._html.append( self._driver.get(url) )
+        root = BeautifulSoup(self._html[-1],'html.parser')
+        self._data.extend( self._parse_page(root,npage=npage) )
+        return root
 
     @classmethod
     def _parse_page(cls, root, npage):
-        return [ cls._parse_item(tag)|{'avito_page':npage,} for tag in root.find_all('div',{'data-marker':'item'}) ]
+        return [ 
+            cls._parse_item(tag)|{'avito_page':npage,} 
+            for tag in root.find_all('div',{'data-marker':'item'}) 
+        ]
         
     @staticmethod
     def _parse_item(tag): 
-        return { 'text':tag.text,'html':str(tag), }
+        return { 'avito_id': tag.attrs['data-item-id'], 'text':tag.text, } # { 'html':str(tag), }
 
+    @classmethod
+    def _get_pages_count(cls,root,page_limit):
+        pages = cls._parse_pages_count(root)
+        logging.info(f'{pages} pages for read')
+        if not(page_limit is None): 
+            pages = min(pages,page_limit+1)
+            logging.info(f'apply page limit - {pages} pages')
+        return pages
+            
     @staticmethod
-    def _get_pages_count(root):
+    def _parse_pages_count(root):
         pp = re.sub( r'.*?p=', '', root.find_all('a',{'class':'pagination-page'})[-1].attrs['href'] ) 
         return 1 if not re.match(r'\d{1,3}', pp) else int(pp)
 
@@ -77,7 +101,7 @@ class AvitoDownloaderRealty(AvitoDownloader):
     @classmethod
     def _parse_item(cls,tag):
         return {    
-            'avito_id': tag.attrs['data-item-id'],   # https://www.avito.ru/<id>
+            'avito_id': tag.attrs['data-item-id'],   # https://www.avito.ru/<avito_id>
             'title': cls._parse_item_tile(tag),
             'price': cls._parse_item_price(tag),
             'obj_name': cls._parse_item_dev_name(tag),
@@ -122,6 +146,8 @@ class AvitoDownloaderRealty(AvitoDownloader):
         except:
             return ''        
 
+
+
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 class AvitoDataCleanerRealty:
     
@@ -153,8 +179,25 @@ class AvitoDataCleanerRealty:
         df['adr'] = (
             df['adr'] 
                 .apply(lambda s: re.sub(r'(\d)(к\d)',r'\1 \2',s))
-                .str.replace(' ш.,',' шоссе,')
-                .str.replace('пр-т','проспект')
+                .apply(lambda s: re.sub(r'\bш\.',' шоссе ',s) )
+                .apply(lambda s: re.sub(r'\bпр-т\b',' проспект ',s) )
+                .apply(lambda s: re.sub(r'\bпер\.',' перeулок ',s) )
+                .apply(lambda s: re.sub(r'\bб-р\b',' бульвар ',s) )
+                .apply(lambda s: re.sub(r'\bс\.',' село ',s) )
+                .apply(lambda s: re.sub(r'\bпос\. городского типа\b.',' ',s) )
+                .apply(lambda s: re.sub(r'\bпос[её]лок городского типа\b.',' ',s) )
+                .apply(lambda s: re.sub(r'\bнаб\.',' набережная ',s) )
+                .apply(lambda s: re.sub(r'\bпл\.',' площадь ',s) )
+                .apply(lambda s: re.sub(r'\bул\.',' улица ',s) )
+                .apply(lambda s: re.sub(r'\bпос\.',' посёлок ',s) )
+                .apply(lambda s: re.sub(r'\bпр\.',' проезд ',s) )
+                .apply(lambda s: re.sub(r'\bпр-д',' проезд ',s) )
+                .apply(lambda s: re.sub(r'садоводческое некоммерческое товарищество',' СНТ ',s) )
+                .apply(lambda s: re.sub(r'садовое некоммерческое товарищество',' СНТ ',s) )
+                .apply(lambda s: re.sub(r'садоводческое товарищество',' СТ ',s) )
+                .apply(lambda s: re.sub(r'садовое товарищество',' СТ ',s) )
+                .apply(lambda s: re.sub(r',\s*,',', ',s))
+                .apply(lambda s: re.sub(r'  +',' ',s))
             )
 
         # df['avito_id'] = df['avito_id'].astype(int)
