@@ -3,6 +3,7 @@
 #
 #  парсер объявлений Авито.ру
 #
+#  Evgeny S. Borisov <parser@mechanoid.su>  
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 
 # import sys 
@@ -25,7 +26,7 @@ from bs4 import BeautifulSoup
 # !pip install selenium
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
-class AvitoDownloader():
+class AvitoDownloader:
     
     def __init__(self,driver, base_url='https://www.avito.ru'):
         self._base_url = base_url
