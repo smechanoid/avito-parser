@@ -13,7 +13,7 @@ import logging
 import re
 # from datetime import datetime as dt
 
-from tqdm import tqdm
+from tqdm.notebook import tqdm
 import pandas as pd
 from bs4 import BeautifulSoup
 
@@ -38,7 +38,7 @@ class AvitoDownloader:
     # загрузить список объявлений Авито
     # из раздела url_ext ( 'sevastopol/kvartiry/prodam' )
     # не более page_limit страниц (если неопределенно то все страницы)
-    def load(self,avito_path,page_limit=None):  
+    def load(self,avito_path,page_limit=None, show_pbar=False):  
         try:
             if re.match('^http.*',avito_path):
                 logging.warning('AvitoDownloader: incorrect avito_path')
@@ -51,7 +51,9 @@ class AvitoDownloader:
 
             # читаем и парсим оставшиеся страницы списка объявлений (начиная со второй)
             logging.info('AvitoDownloader: start read and parse pages...')
-            for p in tqdm(range(2,npages+1)): 
+
+            pages = tqdm(range(2,npages+1)) if show_pbar else range(2,npages+1)
+            for p in pages: 
                 self._read_page(url+f'&p={p}',npage=p) 
                            
         except Exception as e:
@@ -211,30 +213,31 @@ class AvitoDataCleanerRealty:
         df['priceM'] = df['price']/1e6
         df['is_last_floor'] = ( df['floor'] == df['nfloors'] )
 
-        cols = [
-         'adr',
-         'obj_name',
-         'title',
-         'priceM',
-         'nrooms',
-         'floor',
-         'nfloors',
-         'area',
-         'is_studio',
-         'is_apartment',
-         'is_part',
-         'is_auction',
-         'is_openspace',
-         'is_SNT',
-         'is_last_floor', 
-         'is_roof',   
-         'description',
-         'price',
-         'avito_page',
-         'avito_id',
-        ]
+        return df
 
-        return df[cols]
+#         cols = [
+#          'adr',
+#          'obj_name',
+#          'title',
+#          'priceM',
+#          'nrooms',
+#          'floor',
+#          'nfloors',
+#          'area',
+#          'is_studio',
+#          'is_apartment',
+#          'is_part',
+#          'is_auction',
+#          'is_openspace',
+#          'is_SNT',
+#          'is_last_floor', 
+#          'is_roof',   
+#          'description',
+#          'price',
+#          'avito_page',
+#          'avito_id',
+#         ]
+#        return df[cols]
 
 
 
