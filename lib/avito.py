@@ -245,9 +245,6 @@ class AvitoDataCleanerRealty:
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 class AvitoDataAggRealty:
     
-#     def __init__(self,data_path,):
-#         self._data_path = data_path
-
     @classmethod
     def transform(cls,files):
         data = AvitoDataCleanerRealty.transform( cls._load(files) )
@@ -256,7 +253,6 @@ class AvitoDataAggRealty:
 
     @staticmethod
     def _load(files):
-        # files = self._get_files_list(self._data_path,name_filter=r'.+\.xlsx$')
         logging.info(f'AvitoDataAggRealty: {len(files)} raw data files')
         data = [ pd.read_excel(f) for f in files ]
         ts = [ dtm.strptime( re.sub(r'.*/avito_','',f), '%Y-%m-%d_%H-%M_raw.xlsx') for f in files ]
