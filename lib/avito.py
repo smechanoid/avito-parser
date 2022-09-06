@@ -245,25 +245,27 @@ class AvitoDataCleanerRealty:
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 class AvitoDataAggRealty:
     
-    def __init__(self,data_path,):
-        self._data_path = data_path
-    
-    def transform(self):
-        data = AvitoDataCleanerRealty.transform( self._load() )
+#     def __init__(self,data_path,):
+#         self._data_path = data_path
+
+    @classmethod
+    def transform(cls,files):
+        data = AvitoDataCleanerRealty.transform( cls._load(files) )
         logging.info(f'AvitoDataAggRealty: {len(data)} records')
         return data
-        
-    def _load(self):
-        files = self._get_files_list(self._data_path,name_filter=r'.+\.xlsx$')
+
+    @staticmethod
+    def _load(files):
+        # files = self._get_files_list(self._data_path,name_filter=r'.+\.xlsx$')
         logging.info(f'AvitoDataAggRealty: {len(files)} raw data files')
-        data = [ pd.read_excel(self._data_path+'/'+f) for f in files ]
-        ts = [ dtm.strptime(f,'avito_%Y-%m-%d_%H-%M_raw.xlsx') for f in files ]
+        data = [ pd.read_excel(f) for f in files ]
+        ts = [ dtm.strptime( re.sub(r'.*/avito_','',f), '%Y-%m-%d_%H-%M_raw.xlsx') for f in files ]
         for i in range(len(data)): data[i]['ts'] = ts[i]
         return pd.concat(data).drop_duplicates().reset_index(drop=True)
 
-    @staticmethod
-    def _get_files_list(path,name_filter=r'.+'):
-        return sorted([ f for f in listdir(path) if re.match(name_filter,f) ])
+#     @staticmethod
+#     def _get_files_list(path,name_filter=r'.+'):
+#         return sorted([ f for f in listdir(path) if re.match(name_filter,f) ])
     
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
