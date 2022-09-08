@@ -113,7 +113,7 @@ class CianParser(AdsListParser):
     @staticmethod
     def _get_ts(tag):
         try:
-            return tag.find('div',{'data-name':'TimeLabel',}).find_all('span')
+            return [ t.text for t in tag.find('div',{'data-name':'TimeLabel',}).find_all('span') ]
         except:
             return []
         
@@ -174,6 +174,8 @@ class CianDataCleaner:
         df['adr'] = (
             df['adr'] 
                 .apply(lambda s: re.sub(r'(\d)(к\d)',r'\1 \2',s))
+                .apply(lambda s: re.sub(r'\bр-н\b',' район ',s) )
+                .apply(lambda s: re.sub(r'\bмкр\.',' микрорайон ',s) )
                 .apply(lambda s: re.sub(r'\bш\.',' шоссе ',s) )
                 .apply(lambda s: re.sub(r'\bпр-т\b',' проспект ',s) )
                 .apply(lambda s: re.sub(r'\bпер\.',' перeулок ',s) )
@@ -225,7 +227,7 @@ class CianDataCleaner:
             'is_last_floor',
             'cian_url',
             'description',
-            'page',
+            'cian_page',
             'ts',
 
             # 'OfferSubtitle',

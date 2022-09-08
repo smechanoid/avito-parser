@@ -44,10 +44,11 @@ class AvitoParser(AdsListParser):
         return (p+1) > self._npages
  
     # загрузить список объявлений не более page_limit страниц 
-    def load(self, req_param, page_limit=200, keep_html=False): 
+    def load(self, req_param, npage_start=1, npage_end=100, keep_html=False,): 
+
         self._npages = self._parse_pages_count( self._base_url + '?' + req_param+'&p=1'  )
         logging.info(f'AvitoParser: {self._npages} pages for read')
-        return super().load(req_param, page_limit, keep_html) 
+        return super().load(req_param=req_param, npage_start=npage_start, npage_end=npage_end, keep_html=keep_html,) 
 
     def _parse_pages_count(self, url):
         _,root,_= self._read_page(url,npage=1) 
