@@ -1,7 +1,7 @@
 #!python3
 # -*- coding: utf-8 -*-
 #
-#  парсер объявлений Авито.ру
+#  парсер объявлений ЦИАН.ру
 #
 #  Evgeny S. Borisov <parser@mechanoid.su>  
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
@@ -12,6 +12,8 @@ import logging
 
 import re
 from datetime import datetime as dtm
+from time import sleep
+from random import random
 
 # from tqdm.notebook import tqdm
 import pandas as pd
@@ -23,97 +25,128 @@ from datetime import datetime as dtm
 from lib.parser import AdsListParser
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
-class AvitoParser(AdsListParser):
+class CianParser(AdsListParser):
     
-    def __init__(self,driver,base_url='https://www.avito.ru/',):
+    def __init__(self,driver,base_url='https://www.cian.ru/cat.php',random_delay=10.,):
         super().__init__(
             driver=driver, 
             base_url=base_url,
-            item_tag=['div',{'data-marker':'item'},],
+            item_tag=['article',{'data-name':'CardComponent',},],
             paginator_url_param='p',
         )
-        logging.info('AvitoParser: init')
-
-        self._npages = 0
-
-
-    def _parse_item(self,tag): 
-        return { 'avito_id': tag.attrs['data-item-id'], 'text':tag.text, } 
- 
-    def _is_last_page(self,root,p): 
-        return (p+1) > self._npages
- 
-    # загрузить список объявлений не более page_limit страниц 
-    def load(self, req_param, page_limit=200, keep_html=False): 
-        self._npages = self._parse_pages_count( self._base_url + '?' + req_param+'&p=1'  )
-        logging.info(f'AvitoParser: {self._npages} pages for read')
-        return super().load(req_param, page_limit, keep_html) 
-
-    def _parse_pages_count(self, url):
-        _,root,_= self._read_page(url,npage=1) 
-        pp = re.sub( r'.*?p=', '', root.find_all('a',{'class':'pagination-page'})[-1].attrs['href'] ) 
-        return 1 if not re.match(r'\d{1,3}', pp) else int(pp)
- 
-
-
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
-class AvitoParserRealty(AvitoParser):
+        self._random_delay = random_delay
+        logging.info('CianParser: downloader init')
     
-    @classmethod
-    def _parse_item(cls,tag):
-        return {    
-            'avito_id': tag.attrs['data-item-id'],   # https://www.avito.ru/<avito_id>
-            'title': cls._parse_item_tile(tag),
-            'price': cls._parse_item_price(tag),
-            'obj_name': cls._parse_item_dev_name(tag),
-            'adr': cls._parse_item_adr(tag),
-            'description': cls._parse_item_description(tag),
-            }
+    def _read_page(self,url,npage=1): 
+        logging.debug(f'CianParser: {url}')
+        if self._random_delay>0.: 
+            ds = random()*self._random_delay
+            logging.debug(f'CianParser: delay {ds:.2f} sec')
+            sleep( ds )
+        return super()._read_page(url,npage=npage)
+    
+    def _is_last_page(self,root,p): 
+        try:
+            pl = root.find('div',{'data-name':'Pagination',}).find_all('li')[-1].text.strip()
+            logging.debug(f'CianParser: page {p}, last page "{pl}"')
+            if pl=='..': return False
+            return p>=int(pl)
+        except Exception as e:
+            logging.warning(f'CianParser: parse pagination error: {e}')
+            return True
         
+    def _parse_item(self,tag): 
+        return { 
+             'OfferTitle': self._get_title(tag),
+          'OfferSubtitle': self._get_subtitle(tag),
+               'Deadline': self._get_deadline(tag),
+              'MainPrice': self._get_price(tag),
+              'PriceInfo': self._get_price_m(tag),
+               'GeoLabel': self._get_adr(tag),
+              'TimeLabel': self._get_ts( tag ),  
+               'LinkArea': self._get_link( tag ),
+            'Description': self._get_descr(tag),
+            }
+    
     @staticmethod
-    def _parse_item_tile(tag):
+    def _get_deadline(tag):
         try:
-            return tag.find('a',attrs={'itemprop':'url'}).attrs['title']
-        except:
-            return ''    
-      
-    @staticmethod
-    def _parse_item_price(tag):
-        try:
-            return tag.find('meta',attrs={'itemprop':'price'}).attrs['content']
+            return tag.find('span',{'data-mark':'Deadline',}).text
         except:
             return ''
         
     @staticmethod
-    def _parse_item_dev_name(tag):
+    def _get_title(tag):
         try:
-            return tag.find('div',{'data-marker':'item-development-name'}).text
+            return tag.find('span',{'data-mark':'OfferTitle',}).text
         except:
-            return '' 
-           
+            return ''
+        
     @staticmethod
-    def _parse_item_adr(tag):
-        regex_address = re.compile('geo-address-.*')
+    def _get_subtitle(tag):
         try:
-            return tag.find('span',{'class':regex_address}).text
+            return tag.find('span',{'data-mark':'OfferSubtitle',}).text
         except:
-            return '' 
-            
+            return ''
+        
     @staticmethod
-    def _parse_item_description(tag):
-        regex_address = re.compile('geo-address-.*')
+    def _get_price(tag):
         try:
-            return tag.find('meta',attrs={'itemprop':'description'}).attrs['content']
+            return tag.find('span',{'data-mark':'MainPrice',}).text
         except:
             return ''
 
+    @staticmethod
+    def _get_price_m(tag):
+        try:
+            return tag.find('p',{'data-mark':'PriceInfo',}).text
+        except:
+            return ''
+        
+    @staticmethod
+    def _get_adr(tag):
+        try:
+            return [ t.text for t in tag.find_all('a',{'data-name':'GeoLabel',}) ]
+        except:
+            return []
+    
+    @staticmethod
+    def _get_ts(tag):
+        try:
+            return tag.find('div',{'data-name':'TimeLabel',}).find_all('span')
+        except:
+            return []
+        
+    @staticmethod
+    def _get_link(tag):
+        try:
+            return tag.find('div',{'data-name':'LinkArea',}).find('a').attrs['href']
+        except:
+            return ''
+        
+    @staticmethod
+    def _get_descr(tag):
+        try:
+            return tag.find('div',{'data-name':'Description',}).text
+        except:
+            return ''
+
+
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
-class AvitoDataCleanerRealty:
+class CianDataCleaner:
     
     def transform(self,data):
         df = data.copy()
-        df['title'] = df['title'].str.lower().str.extract( r'.*«(.*)».*',expand=False)
-        df['nrooms'] = df['title'].str.extract( r'.*(\d)-к. .*',expand=False)
+        df = df.rename(
+            columns={
+                'OfferTitle':'title',
+                'OfferSubtitle':'obj_name',
+                'Description':'description',
+                'LinkArea':'cian_url',
+            }
+        )
+        
+        df['nrooms'] = df['title'].str.extract( r'.*(\d)-к.*',expand=False)
         df['floor'] = df['title'].str.extract( r'.*(\d+)/\d+.эт.*',expand=False)
         df['nfloors'] = df['title'].str.extract( r'.*\d+/(\d+).эт.*',expand=False)
         df['area'] = (
@@ -127,7 +160,11 @@ class AvitoDataCleanerRealty:
         df['is_part'] = df['title'].str.lower().str.match(r'.*дол.*')
         df['is_auction'] = df['title'].str.lower().str.match(r'.*аукци.*')
         df['is_openspace'] = df['title'].str.lower().str.match(r'.*своб.*планир.*')
+        
         df['is_roof'] = df['description'].str.lower().str.match('.*мансард.*')
+        
+        df['adr'] = df['GeoLabel'].apply(lambda s: ', '.join(s) )
+        
         df['is_SNT'] = (
             df['adr'].str.match('.*СТ .*') 
             | df['adr'].str.match('.*СНТ .*') 
@@ -160,7 +197,7 @@ class AvitoDataCleanerRealty:
 
         # df['avito_id'] = df['avito_id'].astype(int)
 
-        df['price'] = df['price'].astype(int)
+        df['price'] = df['MainPrice'].apply( lambda s: int( re.sub(r'\D','',s) ) )
         df['nrooms'] = df['nrooms'].fillna('0').astype(int)
         df['floor'] = df['floor'].fillna('0').astype(int)
         df['nfloors'] = df['nfloors'].fillna('0').astype(int)
@@ -168,7 +205,38 @@ class AvitoDataCleanerRealty:
         df['priceM'] = df['price']/1e6
         df['is_last_floor'] = ( df['floor'] == df['nfloors'] )
 
-        return df
+        cols=[
+            'title',
+            'obj_name',
+            'adr',
+            'nrooms',
+            'floor',
+            'nfloors',
+            'area',
+            'is_studio',
+            'is_apartment',
+            'is_part',
+            'is_auction',
+            'is_openspace',
+            'is_roof',
+            'is_SNT',
+            'price',
+            'priceM',
+            'is_last_floor',
+            'cian_url',
+            'description',
+            'page',
+            'ts',
+
+            # 'OfferSubtitle',
+            # 'Deadline',
+            # 'MainPrice',
+            # 'PriceInfo',
+            # 'GeoLabel',
+            # 'TimeLabel',
+
+            ]
+        return df[cols]
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 

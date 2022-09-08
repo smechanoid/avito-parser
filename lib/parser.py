@@ -29,7 +29,7 @@ class AdsListParser:
         self._item_tag = item_tag # ['article',{'data-name':'CardComponent',}]
 
     # загрузить список объявлений не более page_limit страниц 
-    def load(self, req_param, page_limit=200, keep_html=False): 
+    def load(self, req_param, npage_start=1, npage_end=100, keep_html=False,): 
         html = [] # считанный "чистый" html
         data = [] # данные извлечённые парсером из html
         try:
@@ -38,12 +38,14 @@ class AdsListParser:
             # читаем и парсим оставшиеся страницы списка объявлений (начиная со второй)
             logging.info('AdsListParser: start read and parse pages...')
 
-            for p in range(1,page_limit):
+            for p in range(npage_start, npage_end):
                 # читаем и парсим страницу p списка объявлений
                 page,root,src = self._read_page(url+f'&{self._paginator_url_param}={p}',npage=p) 
                 data.extend(page)
+
                 if keep_html: html.append(src)
                 logging.info(f'AdsListParser: read page {p}')
+
                 if self._is_last_page(root,p): 
                     logging.info('AdsListParser: last page detected')
                     break
@@ -51,11 +53,12 @@ class AdsListParser:
         except Exception as e:
             logging.error(e) # перехватываем и логируем описания возникших ошибок
 
-        finally: # завершение процесса чтения
-            data = pd.DataFrame(data).dropna()
-            data['ts']  = dtm.now()
-            # выдаём список полученных объявлений и их исходный html
-            return (data,html) if keep_html else data 
+
+        data = pd.DataFrame(data)
+        data['ts']  = dtm.now()
+
+        # выдаём список полученных объявлений и их исходный html
+        return (data,html) if keep_html else data 
           
     # читаем страницу по url
     def _read_page(self,url,npage=1): 
