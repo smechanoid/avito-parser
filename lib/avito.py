@@ -13,12 +13,12 @@ import logging
 import re
 from datetime import datetime as dtm
 
-from tqdm.notebook import tqdm
+# from tqdm.notebook import tqdm
 import pandas as pd
 from bs4 import BeautifulSoup
 
 from datetime import datetime as dtm
-from os import listdir
+# from os import listdir
 
 from lib.parser import AdsListParser
 
@@ -44,10 +44,11 @@ class AvitoParser(AdsListParser):
         return (p+1) > self._npages
  
     # загрузить список объявлений не более page_limit страниц 
-    def load(self, req_param, page_limit=200, keep_html=False): 
+    def load(self, req_param, npage_start=1, npage_end=100, keep_html=False,): 
+
         self._npages = self._parse_pages_count( self._base_url + '?' + req_param+'&p=1'  )
         logging.info(f'AvitoParser: {self._npages} pages for read')
-        return super().load(req_param, page_limit, keep_html) 
+        return super().load(req_param=req_param, npage_start=npage_start, npage_end=npage_end, keep_html=keep_html,) 
 
     def _parse_pages_count(self, url):
         _,root,_= self._read_page(url,npage=1) 
@@ -110,8 +111,7 @@ class AvitoParserRealty(AvitoParser):
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 class AvitoDataCleanerRealty:
     
-    @staticmethod
-    def transform(data):
+    def transform(self,data):
         df = data.copy()
         df['title'] = df['title'].str.lower().str.extract( r'.*«(.*)».*',expand=False)
         df['nrooms'] = df['title'].str.extract( r'.*(\d)-к. .*',expand=False)
@@ -174,94 +174,3 @@ class AvitoDataCleanerRealty:
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 if __name__ == '__main__': pass
-
-
-# from .downloader import DownloaderSeleniumFirefox
-
-#from selenium import webdriver
-#from selenium.webdriver.firefox.options import Options
-#from selenium.webdriver.firefox.options import FirefoxProfile
-# !pacman -S firefox firefox-i18n-r  geckodriver
-# !pip install selenium
-
-
-# # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
-# class AvitoDownloader:
-#     
-#     def __init__(self,driver, base_url='https://www.avito.ru'):
-#         logging.info('AvitoDownloader: downloader init')
-#         self._base_url = base_url
-#         self._driver = driver # ссылка на открытый браузер
-#         
-#         
-#     # загрузить список объявлений Авито
-#     # из раздела url_ext ( 'sevastopol/kvartiry/prodam' )
-#     # не более page_limit страниц (если неопределенно то все страницы)
-#     def load(self, avito_path, page_limit=None, show_pbar=False, keep_html=False): 
-#         html = [] # считанный "чистый" html
-#         data = [] # данные извлечённые парсером из html
-#         try:
-#             if re.match('^http.*',avito_path):
-#                 logging.warning('AvitoDownloader: incorrect avito_path')
-# 
-#             url = self._base_url + '/' + avito_path + '?'
-#             
-#             # читаем и парсим оставшиеся страницы списка объявлений (начиная со второй)
-#             logging.info('AvitoDownloader: start read and parse pages...')
-# 
-#             page,root,src = self._read_page(url) # читаем и парсим первую страницу списка объявлений
-#             data.extend(page)
-#             if keep_html: html.append(src)
-#                 
-#             # считываем количество страниц, на которые поделен список объявлений
-#             npages = self._get_pages_count(root,page_limit=page_limit)
-#             
-#             npages_ = tqdm(range(2,npages+1)) if show_pbar else range(2,npages+1)
-#             for p in npages_: 
-#                 # читаем и парсим страницу p списка объявлений
-#                 page,_,src = self._read_page(url+f'&p={p}',npage=p) 
-#                 data.extend(page)
-#                 if keep_html: html.append(src)
-#                            
-#         except Exception as e:
-#             logging.error(e) # перехватываем и логируем описания возникших ошибок
-# 
-#         finally: # завершение процесса чтения
-#             data = pd.DataFrame(data).dropna()
-#             data['ts']  = dtm.now()
-#             # выдаём список полученных объявлений и их исходный html
-#             return (data,html) if keep_html else data 
-#                  
-#           
-#     # читаем страницу Авито по url
-#     def _read_page(self,url,npage=1): 
-#         html = self._driver.get(url)
-#         root = BeautifulSoup(html,'html.parser')
-#         return self._parse_page(root,npage=npage),root, html,  
-# 
-#     @classmethod
-#     def _parse_page(cls, root, npage):
-#         return [ 
-#             cls._parse_item(tag)|{'avito_page':npage,} 
-#             for tag in root.find_all('div',{'data-marker':'item'}) 
-#         ]
-#         
-#     @staticmethod
-#     def _parse_item(tag): 
-#         return { 'avito_id': tag.attrs['data-item-id'], 'text':tag.text, } # { 'html':str(tag), }
-# 
-#     @classmethod
-#     def _get_pages_count(cls,root,page_limit):
-#         pages = cls._parse_pages_count(root)
-#         logging.info(f'{pages} pages for read')
-#         if not(page_limit is None): 
-#             pages = min(pages,page_limit+1)
-#             logging.info(f'apply page limit - {pages} pages')
-#         return pages
-#             
-#     @staticmethod
-#     def _parse_pages_count(root):
-#         pp = re.sub( r'.*?p=', '', root.find_all('a',{'class':'pagination-page'})[-1].attrs['href'] ) 
-#         return 1 if not re.match(r'\d{1,3}', pp) else int(pp)
- 
-
