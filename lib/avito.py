@@ -181,11 +181,12 @@ class AvitoDataCleanerRealtyLand:
     def transform(self,data):
         df = data.copy()
         
-        symb_lat = 'yexapocEXAPOCTHKBM'
-        symb_rus = 'уехаросЕХАРОСТНКВМ'
-        l2r = str.maketrans(symb_lat,symb_rus) 
+        #symb_lat = 'yexapocEXAPOCTHKBM'
+        #symb_rus = 'уехаросЕХАРОСТНКВМ'
+        #l2r = str.maketrans(symb_lat,symb_rus) 
         
-        df['title'] = df['title'].str.extract( r'«(.*)»',expand=False).apply(lambda s: s.translate(l2r) )
+        df['title'] = df['title'].str.extract( r'«(.*)»',expand=False) 
+        #.apply(lambda s: s.translate(l2r) )
         
         area = df['title'].str.extract( r'(\d+,?\d*)\s*(сот|га)',expand=True)
         area.columns=['area','area_unit']
@@ -193,10 +194,23 @@ class AvitoDataCleanerRealtyLand:
                        
         df['is_IJS'] = df['title'].str.lower().str.match(r'.*ижс.*')
         df['obj_name'] = df['obj_name'].fillna('')
-        df['price'] = df['price'].astype(int)
+        
         df['area'] = df['area'].fillna('0.').str.replace(',','.').astype(float)
+        df.loc[ df['area_unit']=='га', 'area' ] = df.query('area_unit=="га"')['area']*100.
+        df = df.drop(columns=['area_unit'])
+        
+        df['price'] = df['price'].astype(int)
         df['priceM'] = df['price']/1e6
+        df['priceMU'] = df['priceM']/df['area']
+
+        area_bins = [ 0., 1., 2., 4., 8., 20., 1e6, ]
+        labels = [ '<1', '1-2','2-4', '4-8', '8-20', '20+' ]
+        # labels = [ 'tiny', 'small','medium', 'big', 'large', 'huge' ]
+        df['area_size_category'] = pd.cut( df['area'], bins = area_bins, labels=labels)
+
         return df
+
+
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 if __name__ == '__main__': pass
