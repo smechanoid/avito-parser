@@ -109,9 +109,13 @@ class AvitoParserRealty(AvitoParser):
             return ''
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
-class AvitoDataCleanerRealty:
+class AvitoDataCleanerRealtyFlat:
     
     def transform(self,data):
+        #symb_lat = 'yexapocEXAPOCTHKBM'
+        #symb_rus = 'уехаросЕХАРОСТНКВМ'
+        #l2r = str.maketrans(symb_lat,symb_rus)
+
         df = data.copy()
         df['title'] = df['title'].str.lower().str.extract( r'.*«(.*)».*',expand=False)
         df['nrooms'] = df['title'].str.extract( r'.*(\d)-к. .*',expand=False)
@@ -171,6 +175,28 @@ class AvitoDataCleanerRealty:
 
         return df
 
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+class AvitoDataCleanerRealtyLand:
+    
+    def transform(self,data):
+        df = data.copy()
+        
+        symb_lat = 'yexapocEXAPOCTHKBM'
+        symb_rus = 'уехаросЕХАРОСТНКВМ'
+        l2r = str.maketrans(symb_lat,symb_rus) 
+        
+        df['title'] = df['title'].str.extract( r'«(.*)»',expand=False).apply(lambda s: s.translate(l2r) )
+        
+        area = df['title'].str.extract( r'(\d+,?\d*)\s*(сот|га)',expand=True)
+        area.columns=['area','area_unit']
+        df = pd.concat([df,area],axis=1)
+                       
+        df['is_IJS'] = df['title'].str.lower().str.match(r'.*ижс.*')
+        df['obj_name'] = df['obj_name'].fillna('')
+        df['price'] = df['price'].astype(int)
+        df['area'] = df['area'].fillna('0.').str.replace(',','.').astype(float)
+        df['priceM'] = df['price']/1e6
+        return df
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 if __name__ == '__main__': pass
