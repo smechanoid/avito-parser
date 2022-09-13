@@ -50,7 +50,7 @@ class GeocoderOSM(Geocoder):
         truncated = False
         while True:
             if not (loc is None): # нашел...
-                return {'latitude':loc.latitude,'longitude':loc.longitude,'truncated':truncated }#,adr_
+                return {'latitude':loc.latitude,'longitude':loc.longitude,'truncated':truncated } #,adr_
 
             # ...не нашел...
             if( len(adr_) < 3 ): break # адрес слишком короткий для сокращения
@@ -140,26 +140,26 @@ class LocationUpdater:
         logging.info(f'LocationUpdater: {len(loc_all)} addresses total')
         
         # собираем все адреса с геопозицией
-        loc_def = loc_all[~loc_all['latitude'].isnull()]
+        loc_def = loc_all[~loc_all['latitude'].isnull()].reset_index(drop=True)
         logging.info(f'LocationUpdater: {len(loc_def)} addresses defined')
         
         # собираем все адреса без геопозиции
-        loc_undef = loc_all[loc_all['latitude'].isnull()][['adr']]
+        loc_undef = loc_all[loc_all['latitude'].isnull()][['adr']].reset_index(drop=True)
         logging.info(f'LocationUpdater: {len(loc_undef)} addresses undefined')
         
         if len(loc_undef)<1: return loc_def.reset_index(drop=True)  
 
-        # чистим адреса без геопозиции
-        adr_tr = self._atr.transform(loc_undef['adr'])
+        adr_tr = self._atr.transform(loc_undef['adr']) # чистим адреса для определения геопозиции
 
-        # ищем геопозицию
-        loc_undef_tr = self._locator.transform( adr_tr, show_pbar=show_pbar )
+        loc_undef_tr = self._locator.transform( adr_tr, show_pbar=show_pbar ) # ищем геопозицию
 
         # восстанавливаем соответствие оригинальных и очищенных адресов 
         loc_undef = pd.concat([
                 loc_undef,
                 loc_undef_tr.drop(columns=['adr',]),
-            ],axis=1).dropna()
+            ],axis=1)
+
+        loc_undef = loc_undef[ ~loc_undef['longitude'].isnull() ].reset_index(drop=True)
 
         logging.info(f'LocationUpdater: {len(loc_undef)} new addresses found')
 
