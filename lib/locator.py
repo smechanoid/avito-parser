@@ -12,28 +12,37 @@ import logging
 
 import re
 # from datetime import datetime as dt
+import requests
+from requests.exceptions import HTTPError
 
 from tqdm.notebook import tqdm
 import pandas as pd
 
 from geopy.geocoders import Nominatim
 
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+class Geocoder:
+    
+    def transform(self, adr, show_pbar=False):
+        # ищем геометку по адресу
+        pos =(
+            pd.DataFrame( adr.progress_apply(self._get_coo).tolist() )
+            if show_pbar
+            else pd.DataFrame( adr.apply(self._get_coo).tolist() )
+        )
+        return pd.concat([ adr, pos ],axis=1)
+        
+    def _get_coo(self,adr):
+            return {'latitude':None,'longitude':None, }
+ 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
-class GeocoderOSM:
+class GeocoderOSM(Geocoder):
     
     def __init__(self,):
         user_agent='Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0'
         self._geolocator = Nominatim(user_agent=user_agent)
-   
-    def transform(self,loc,show_pbar=False):
-        # ищем геометку по адресу
-        pos =(
-            loc.progress_apply(self._get_coo).apply(pd.Series)
-            if show_pbar
-            else loc.apply(self._get_coo).apply(pd.Series)
-        )
-        return pd.concat([ loc,pos ],axis=1)
+        super().__init__()
         
     def _get_coo(self,adr):
         adr_ = adr.split(',')
@@ -50,6 +59,42 @@ class GeocoderOSM:
             truncated = True
 
         return {'latitude':None,'longitude':None,'truncated':None, }
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+class GeocoderYandex(Geocoder):
+    
+    def __init__(self,key):
+        #user_agent='Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0'
+        self._key=key
+        super().__init__()
+   
+    def _get_coo(self,adr):
+        loc = self._req(adr)
+        try:
+            coo = loc[0]['GeoObject']['Point']['pos'].split()
+            return { l:float(c) for l,c in zip(['longitude','latitude'],coo) }
+            
+        except:
+            return {'latitude':None,'longitude':None, }
+        
+    def _req(self,adr):
+        url = f'https://geocode-maps.yandex.ru/1.x/?lang=ru_RU&apikey={self._key}&geocode={adr}'
+        try:
+            r = requests.get(url,params={'format':'json',})
+            r.raise_for_status() 
+            logging.debug('HttpGetRequest: request success')
+            return r.json()['response']['GeoObjectCollection']['featureMember']
+
+        except HTTPError as http_err:
+            logging.error(f'HttpGetRequest: request : {http_err}')
+
+        except Exception as err:
+            logging.error(f'HttpGetRequest: request : {err}')
+
+        return None
+
+
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 class AddressTransformer:
@@ -83,10 +128,11 @@ class AddressTransformerSev(AddressTransformer):
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 class LocationUpdater:
 
-    def __init__(self,address_transformer=AddressTransformer(),):
+    def __init__(self, locator=GeocoderOSM(), address_transformer=AddressTransformer(),):
         self._atr = address_transformer
+        self._locator = locator
     
-    def transform(self,adr,loc=pd.DataFrame([],columns=['adr','latitude','longitude','truncated']),show_pbar=False,):
+    def transform(self,adr,loc=pd.DataFrame([],columns=['adr','latitude','longitude',]),show_pbar=False,):
         logging.info(f'LocationUpdater: {len(loc)} addresses in location table')
         
         # собираем все адреса в один список
@@ -104,21 +150,22 @@ class LocationUpdater:
         if len(loc_undef)<1: return loc_def.reset_index(drop=True)  
 
         # чистим адреса без геопозиции
-        loc_undef_tr = self._atr.transform(loc_undef['adr'])
+        adr_tr = self._atr.transform(loc_undef['adr'])
+
         # ищем геопозицию
-        loc_undef_tr = GeocoderOSM().transform( loc_undef_tr, show_pbar=show_pbar )
-        # собираем список новых адресов
+        loc_undef_tr = self._locator.transform( adr_tr, show_pbar=show_pbar )
+
+        # восстанавливаем соответствие оригинальных и очищенных адресов 
         loc_undef = pd.concat([
                 loc_undef,
-                loc_undef_tr[['latitude','longitude','truncated']]
+                loc_undef_tr.drop(columns=['adr',]),
             ],axis=1).dropna()
+
         logging.info(f'LocationUpdater: {len(loc_undef)} new addresses found')
 
         # собираем обновлённую таблицу адресов
         return pd.concat([loc_def,loc_undef]).reset_index(drop=True)  
-        # return loc_def.reset_index(drop=True) if len(loc_undef)<1 else pd.concat([loc_def,loc_undef]).reset_index(drop=True)  
     
-# LocationUpdater(address_transformer=AddressTransformerSev(),).transform(data['adr'],loc)
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
