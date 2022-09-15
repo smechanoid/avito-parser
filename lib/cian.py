@@ -229,6 +229,7 @@ class CianDataCleaner:
             'description',
             'cian_page',
             'ts',
+            'place',
 
             # 'OfferSubtitle',
             # 'Deadline',
