@@ -113,7 +113,6 @@ class AddressTransformer:
                 .apply(lambda s: re.sub(r',\s*,',', ',s))
                 .apply(lambda s: re.sub(r' +',' ',s))
             )
-
         
 # # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 # class AddressTransformerSev(AddressTransformer):
@@ -141,15 +140,15 @@ class AddressTransformer:
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 class LocationUpdater:
 
-    def __init__(self, locator=GeocoderOSM(), ): # address_transformer=AddressTransformer(),):
-        # self._atr = address_transformer
+    def __init__(self, locator=GeocoderOSM() ):   #, address_transformer=AddressTransformer(),):
+        #  self._atr = address_transformer
         self._locator = locator
     
     def transform(self,adr,loc=pd.DataFrame([],columns=['adr','latitude','longitude',]),show_pbar=False,):
         logging.info(f'LocationUpdater: {len(loc)} addresses in location table')
         
         # собираем все адреса в один список
-        loc_all = loc.merge(adr,how='outer').drop_duplicates().reset_index(drop=True)
+        loc_all = loc.merge(adr,how='outer',on='adr').drop_duplicates().reset_index(drop=True)
         logging.info(f'LocationUpdater: {len(loc_all)} addresses total')
         
         # собираем все адреса с геопозицией
@@ -163,9 +162,9 @@ class LocationUpdater:
         if len(loc_undef)<1: return loc_def.reset_index(drop=True)  
 
         # adr_tr = self._atr.transform(loc_undef['adr']) # чистим адреса для определения геопозиции
-        adr_tr = loc_undef['adr'] # чистим адреса для определения геопозиции
+        # adr_tr = loc_undef['adr'] # чистим адреса для определения геопозиции
 
-        loc_undef_tr = self._locator.transform( adr_tr, show_pbar=show_pbar ) # ищем геопозицию
+        loc_undef_tr = self._locator.transform(  loc_undef['adr'], show_pbar=show_pbar ) # ищем геопозицию
 
         # восстанавливаем соответствие оригинальных и очищенных адресов 
         loc_undef = pd.concat([
