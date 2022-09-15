@@ -210,7 +210,67 @@ class AvitoDataCleanerRealtyLand:
 
         return df
 
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+class AvitoDataCleanerRealtyHouse:
+    
+    def transform(self,data): 
+        df = data.copy()
+        df['title'] = df['title'].str.lower().str.extract( r'.*«(.*)».*',expand=False)
+        
+        df['house_area'] = (
+            df['title']
+            .str.extract( r'([\d,]+)\s*м²',expand=False)
+            .str.replace(',','.')
+        )
 
+        df['is_part'] = (
+            df['description'].str.lower().str.match(r'.*\d+/\d+\s*(часть)?\s*(дом|дол).*')
+            | df['description'].str.lower().str.match(r'.*часть\s*(дом|дол).*')
+            | df['description'].str.lower().str.match(r'.*продам\s*(дол|часть).*')
+            | df['description'].str.lower().str.match(r'.*дуплекс.*')
+            | df['description'].str.lower().str.match(r'.*две семьи.*')
+        )
+        
+        df['is_townhouse'] = (
+            df['description'].str.lower().str.match(r'.*таунхаус.*')
+            | df['title'].str.lower().str.match(r'.*таунхаус.*')
+        )
+
+        df['is_SNT'] = (
+            df['adr'].str.match('.*СТ.*') 
+            | df['adr'].str.match('.*СНТ.*') 
+            | df['adr'].str.match('.*ТСН.*') 
+            | df['adr'].str.lower().str.match('.*садов')
+        ) 
+        
+        area = df['title'].str.extract( r'(\d+,?\d*)\s*(сот|га)',expand=True)
+        area.columns=['land_area','land_area_unit']
+        df = pd.concat([df,area],axis=1)
+                       
+        df['obj_name'] = df['obj_name'].fillna('')
+        
+        df['house_area'] = df['house_area'].fillna('0.').str.replace(',','.').astype(float)
+        df['land_area'] = df['land_area'].fillna('0.').str.replace(',','.').astype(float)
+        df.loc[ df['land_area_unit']=='га', 'land_area' ] = df.query('land_area_unit=="га"')['land_area']*100.
+        df = df.drop(columns=['land_area_unit'])
+        
+        df['price'] = df['price'].astype(int)
+        df['priceM'] = df['price']/1e6
+
+        # [ 'tiny', 'small','medium', 'big', 'large', 'huge' ]
+        df['land_size_category'] = pd.cut( 
+                df['land_area'], 
+                bins =  [ 0., 1., 2., 4., 8., 20., 1e6, ], 
+                labels = [ '<1', '1-2','2-4', '4-8', '8-20', '20+' ],
+        )
+        
+        df['house_size_category'] = pd.cut( 
+                df['house_area'], 
+                bins = [ 0., 30., 50., 70., 150., 300., 1e6, ], 
+                labels = [ '<30', '30-50','50-70', '70-150', '150-300', '300+' ],
+            )
+        
+        return df
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 if __name__ == '__main__': pass

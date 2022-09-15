@@ -99,37 +99,50 @@ class GeocoderYandex(Geocoder):
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 class AddressTransformer:
     
-    # чистим строку адреса
-    def transform(self,adr): 
-        return adr
-    
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
-class AddressTransformerSev(AddressTransformer):
-    
-    def transform(self,adr): 
+    def transform(self,adr):  # чистим строку адреса
         symb_lat = 'yexapocEXAPOCTHKBM'
         symb_rus = 'уехаросЕХАРОСТНКВМ'
         l2r = str.maketrans(symb_lat,symb_rus) 
         return (
                 adr
                 .apply(lambda s: s.translate(l2r) )
-                .apply(lambda s: re.sub(r'\b[Сс]евастополь\b','',s))
                 .apply(lambda s: re.sub(r'\bмикрорайон\b',' ',s))
                 .apply(lambda s: re.sub(r'\bмуниципальный округ\b',' район ',s))
                 .apply(lambda s: re.sub(r'\bкотт?еджный пос[ёе]лок\b',' ',s))
                 .apply(lambda s: re.sub(r'\bпос[ёе]лок\b',' ',s))
-                .apply(lambda s: re.sub(r'^','Севастополь, ',s))
-                # .apply(lambda s: re.sub(r'[Сс]евастополь.*село\b','Крым, село ',s))
                 .apply(lambda s: re.sub(r',\s*,',', ',s))
                 .apply(lambda s: re.sub(r' +',' ',s))
             )
 
+        
+# # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+# class AddressTransformerSev(AddressTransformer):
+#     
+#     def transform(self,adr): 
+#         symb_lat = 'yexapocEXAPOCTHKBM'
+#         symb_rus = 'уехаросЕХАРОСТНКВМ'
+#         l2r = str.maketrans(symb_lat,symb_rus) 
+#         return (
+#                 adr
+#                 .apply(lambda s: s.translate(l2r) )
+#                 .apply(lambda s: re.sub(r'\b[Сс]евастополь\b','',s))
+#                 .apply(lambda s: re.sub(r'\bмикрорайон\b',' ',s))
+#                 .apply(lambda s: re.sub(r'\bмуниципальный округ\b',' район ',s))
+#                 .apply(lambda s: re.sub(r'\bкотт?еджный пос[ёе]лок\b',' ',s))
+#                 .apply(lambda s: re.sub(r'\bпос[ёе]лок\b',' ',s))
+#                 .apply(lambda s: re.sub(r'^','Севастополь, ',s))
+#                 # .apply(lambda s: re.sub(r'[Сс]евастополь.*село\b','Крым, село ',s))
+#                 .apply(lambda s: re.sub(r',\s*,',', ',s))
+#                 .apply(lambda s: re.sub(r' +',' ',s))
+#             )
+# 
+#     
     
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 class LocationUpdater:
 
-    def __init__(self, locator=GeocoderOSM(), address_transformer=AddressTransformer(),):
-        self._atr = address_transformer
+    def __init__(self, locator=GeocoderOSM(), ): # address_transformer=AddressTransformer(),):
+        # self._atr = address_transformer
         self._locator = locator
     
     def transform(self,adr,loc=pd.DataFrame([],columns=['adr','latitude','longitude',]),show_pbar=False,):
@@ -149,7 +162,8 @@ class LocationUpdater:
         
         if len(loc_undef)<1: return loc_def.reset_index(drop=True)  
 
-        adr_tr = self._atr.transform(loc_undef['adr']) # чистим адреса для определения геопозиции
+        # adr_tr = self._atr.transform(loc_undef['adr']) # чистим адреса для определения геопозиции
+        adr_tr = loc_undef['adr'] # чистим адреса для определения геопозиции
 
         loc_undef_tr = self._locator.transform( adr_tr, show_pbar=show_pbar ) # ищем геопозицию
 
