@@ -37,7 +37,7 @@ class Geocoder:
  
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
-class GeocoderOSM(Geocoder):
+class GeocoderOSMSimple(Geocoder):
     
     def __init__(self,):
         user_agent='Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0'
@@ -47,19 +47,27 @@ class GeocoderOSM(Geocoder):
     def _get_coo(self,adr):
         adr_ = adr.split(',')
         loc = self._geolocator.geocode(adr_) # пробуем определить координаты
-        truncated = False
-        while True:
-            if not (loc is None): # нашел...
-                return {'latitude':loc.latitude,'longitude':loc.longitude,'truncated':truncated } #,adr_
+        if not (loc is None): # нашел...
+            return {'latitude':loc.latitude,'longitude':loc.longitude,'truncated':is_truncated }
 
-            # ...не нашел...
-            if( len(adr_) < 3 ): break # адрес слишком короткий для сокращения
-            adr_ = adr_[:-1] # выкидываем часть адреса (номер дома)
-            loc = self._geolocator.geocode( adr_) # ... и пробуем ещё раз
-            truncated = True
-
+        # ...не нашел...
         return {'latitude':None,'longitude':None,'truncated':None, }
 
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+class GeocoderOSM(GeocoderOSMSimple):
+    
+    def _get_coo(self,adr, is_truncated = False):
+        adr_ = adr.split(',')
+        loc = self._geolocator.geocode(adr_) # пробуем определить координаты
+        if not (loc is None): # нашел...
+            return {'latitude':loc.latitude,'longitude':loc.longitude,'truncated':is_truncated }
+        # ...не нашел...
+        if len(adr_)>2: # если разрешено сокращение адреса ...
+            # выкидываем часть адреса (номер дома)
+            return self._get_coo(', '.join(adr_[:-1]), truncate=False, is_truncated=True )
+
+        return {'latitude':None,'longitude':None,'truncated':None, } # ...не нашел...
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 class GeocoderYandex(Geocoder):
