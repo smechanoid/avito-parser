@@ -16,30 +16,30 @@ from shapely.geometry import Polygon
 
 
 # - - - - - - - - - - - - - - - - 
-def load_data(data_file = 'data/data_flat.pkl'):
-    # cols = ['title','adr','latitude','longitude','priceM','ts']
-    df = pd.read_pickle(data_file)
-    df['dt'] = pd.to_datetime( df['ts'].dt.date )
-    
-    # берём объявления с геометкой
-    df = df[ (~df['latitude'].isnull()) ].reset_index(drop=True)
-
-    # выкидываем 'ущербные' варианты 
-    df = df.query('~(is_studio|is_apartment|is_part|is_auction|is_openspace|is_SNT|is_roof)&(nrooms>0)&(nrooms<4)')
-    gdf = gpd.GeoDataFrame( df, geometry = gpd.points_from_xy( df['longitude'], df['latitude']), crs='epsg:4326', )
-
-    # del df
-
-    return gdf
-
-def load_frames(frames_path= 'data/frames/'):  # загружаем области поиска
-    frames_index = pd.read_csv(f'{frames_path}/_index.tsv',sep='\t')
-    swap_coo = lambda coo : [ (c[1],c[0]) for c in coo ]
-    df2poly = lambda df : Polygon(swap_coo(df.values))
-    return  gpd.GeoDataFrame([ 
-        { 'area_name':nm, 'geometry': df2poly( pd.read_csv(f'{frames_path}/{f}',header=None) ) } 
-        for nm,f in frames_index.values
-    ],crs='epsg:4326',)
+# def load_data(data_file = 'data/data_flat.pkl'):
+#     # cols = ['title','adr','latitude','longitude','priceM','ts']
+#     df = pd.read_pickle(data_file)
+#     df['dt'] = pd.to_datetime( df['ts'].dt.date )
+#     
+#     # берём объявления с геометкой
+#     df = df[ (~df['latitude'].isnull()) ].reset_index(drop=True)
+# 
+#     # выкидываем 'ущербные' варианты 
+#     df = df.query('~(is_studio|is_apartment|is_part|is_auction|is_openspace|is_SNT|is_roof)&(nrooms>0)&(nrooms<4)')
+#     gdf = gpd.GeoDataFrame( df, geometry = gpd.points_from_xy( df['longitude'], df['latitude']), crs='epsg:4326', )
+# 
+#     # del df
+# 
+#     return gdf
+# 
+# def load_frames(frames_path= 'data/frames/'):  # загружаем области поиска
+#     frames_index = pd.read_csv(f'{frames_path}/_index.tsv',sep='\t')
+#     swap_coo = lambda coo : [ (c[1],c[0]) for c in coo ]
+#     df2poly = lambda df : Polygon(swap_coo(df.values))
+#     return  gpd.GeoDataFrame([ 
+#         { 'area_name':nm, 'geometry': df2poly( pd.read_csv(f'{frames_path}/{f}',header=None) ) } 
+#         for nm,f in frames_index.values
+#     ],crs='epsg:4326',)
 
 
 def calc_stat(gdf):
@@ -68,7 +68,8 @@ app.base_layer(
 
 # - - - - - - - - - - - - - - - - 
 
-frames = load_frames()
+# frames = load_frames()
+frames = gpd.read_file('data/frames.geojson')
 
 frame_names = frames['area_name'].values.tolist()
 # frame_select = app.multiselect(
@@ -96,10 +97,10 @@ app.overlay_layer(
 # - - - - - - - - - - - - - - - - 
 
 cols = ['avito_id','title','adr','latitude','longitude','priceM','nrooms','dt','geometry']
-gdf = load_data()
+# gdf = load_data()
 
 # фильтруем данные по области
-gdf = gdf.sjoin( frames[frames['area_name']==frame_select], how='inner', predicate='within')[cols].reset_index(drop=True)
+gdf = gpd.read_file('data/data_flat.geojson').sjoin( frames[frames['area_name']==frame_select], how='inner', predicate='within')[cols].reset_index(drop=True)
 
 app.vector_layer(
     data=gdf.drop(columns=['dt',]),
