@@ -26,10 +26,13 @@ ID_HOUSE_SIZE = 'house-size-select'
 # ID_FRAME = 'frame-select'
 ID_PRICE = 'price-slider'
 ID_PRICE_LABEL = 'price-label'
+ID_RESET_BUTTON = 'reset-button'
 
 HOUSE_SIZE_DEFAULT = '- все -'   
 # FRAME_NAME_DEFAULT = '- все -'
 PLACE_DEFAULT = 'sevastopol'
+
+
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 def load_data(file_path='data/data_house.pkl'): # загружаем список объявлений
@@ -126,11 +129,12 @@ prices = sorted(
 def panel_control(places,house_size): # панель управления
     return html.Div(style= {'margin':'5px',}, children = [
                 # выбор комнаты
-                html.Div( dcc.Dropdown(id=ID_PLACE, options=places, value=PLACE_DEFAULT,), style= { 'width':'40%','float':'left',}, ),  
+                html.Div( dcc.Dropdown(id=ID_PLACE, options=places, value=PLACE_DEFAULT,clearable=False,), style= { 'width':'40%','float':'left',}, ),  
                 # выбор района
-                html.Div( dcc.Dropdown(id=ID_HOUSE_SIZE, options= [HOUSE_SIZE_DEFAULT,] + house_size, value=HOUSE_SIZE_DEFAULT ), style= {'width':'20%','float':'left',}, ), 
+                html.Div( dcc.Dropdown(id=ID_HOUSE_SIZE, options= [HOUSE_SIZE_DEFAULT,] + house_size, value=HOUSE_SIZE_DEFAULT,clearable=False ), style= {'width':'20%','float':'left',}, ), 
                 # выбор области поиска
                 # html.Div( dcc.Dropdown(id=ID_FRAME, options= [FRAME_NAME_DEFAULT,] + frame_names, value=FRAME_NAME_DEFAULT), style= {'width':'40%','float':'left',}, ), 
+                # html.Div( html.Button('сброс',id=ID_RESET_BUTTON, title='сброс'), style= {'width':'10%','float':'left', 'padding':'7px',}, )
             ]
             )
 
@@ -140,11 +144,13 @@ def panel_stat(): # панель с диаграммами
 
 def panel_map_control(prices):
     return html.Div(style= {'margin':'5px',},children = [
-                html.Div( dcc.Slider(
+                html.Div( 
+                    dcc.RangeSlider(
                         id=ID_PRICE, 
                         min=prices[0], 
                         max=prices[-1], 
-                        value=prices[-1], 
+                        # step=None,
+                        value=[prices[0],prices[-1]], 
                         marks = { p:f'{p:.1f}M' for p in prices },
                     ),
                     style= {'float':'left','width':'80%',}, 
@@ -229,7 +235,7 @@ def convert_data_points(df):  # конвертируем данные геофр
 #    Input(component_id=ID_FRAME, component_property='value'), # обработчик события "выбор района из списка"
     Input(component_id=ID_PRICE, component_property='value'), # обработчик события "ограничение цены"
 )
-def update_map(place,house_size,max_price): # обновление меток на карте при изменении параметров поиска
+def update_map(place,house_size,price): # обновление меток на карте при изменении параметров поиска
     layers = [ dl.TileLayer(), ] # базовый слой OSM
 
     data_ = data.query(f'place=="{place}"').drop_duplicates('url') 
@@ -239,10 +245,8 @@ def update_map(place,house_size,max_price): # обновление меток н
         data_ = data_.query(f'house_size_category=="{house_size}"')
         if len(data_)<1: return layers
 
-    mp = float(max_price)
-    if mp>0.: 
-        data_ = data_[ data_['priceM']<=mp ] 
-        if len(data_)<1 : return layers
+    data_ = data_[ data_['priceM'].between(*price) ] 
+    if len(data_)<1 : return layers
 
     # обозначаем точки на карте
     return layers + [dl.GeoJSON( data=convert_data_points(data_), zoomToBounds=True, cluster=True ), ]
@@ -251,9 +255,18 @@ def update_map(place,house_size,max_price): # обновление меток н
     Output(component_id=ID_PRICE_LABEL, component_property='children'),
     Input(component_id=ID_PRICE, component_property='value'), # обработчик события "ограничение цены"
 )
-def update_price_label(max_price): # обновление меток на карте при изменении района поиска
-    mp = float(max_price)
-    return f'цена до {mp:.1f}M'
+def update_price_label(price): # обновление меток на карте при изменении района поиска
+    return f'цена от {price[0]:.1f}M до {price[1]:.1f}M'
+
+
+
+
+# @app.callback(
+#     Output(ID_PLACE, 'children'),
+#     Input(ID_RESET_BUTTON, 'n_clicks'),
+# )
+# def reset_button_click(): pass
+# # ID_HOUSE_SIZE
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 

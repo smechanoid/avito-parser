@@ -97,7 +97,7 @@ def plot_stat(df_stat):
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 # загружаем данные
 data = convert_geodata( data_filter( load_data() ) ) # фильтрованные объявления с геометкой
-nrooms =  {-1:'- любые -',} | { nr:f'{nr}-комнатные' for nr in sorted(set(data['nrooms']))  }
+nrooms =  {-1:'- все -',} | { nr:f'{nr}-комнатные' for nr in sorted(set(data['nrooms']))  }
 frame_index = load_frames_index() # список областей поиска
 area_index = frame_index['place_name'].tolist()
 frames = load_frames(frame_index) # координаты областей поиска
@@ -117,13 +117,12 @@ prices = sorted(
 
 def panel_control(area_index,nrooms): # панель управления
     return html.Div(style= {'margin':'5px',}, children = [
-                # выбор комнаты
-                html.Div( dcc.Dropdown(id=ID_NROOM, options=nrooms, value=NROOM_DEFAULT,), style= { 'width':'40%','float':'left',}, ),  
-                # выбор района
-                html.Div( dcc.Dropdown(id=ID_FRAME, options=[FRAME_NAME_DEFAULT] + area_index, value=FRAME_NAME_DEFAULT, ), style= {'width':'60%','float':'right',}, ), 
-            ]
-            )
-         
+            # выбор комнаты
+            html.Div( dcc.Dropdown(id=ID_NROOM, options=nrooms, value=NROOM_DEFAULT,clearable=False), style= { 'width':'40%','float':'left',}, ),  
+            # выбор района
+            html.Div( dcc.Dropdown(id=ID_FRAME, options=[FRAME_NAME_DEFAULT] + area_index, value=FRAME_NAME_DEFAULT,clearable=False ), style= {'width':'60%','float':'right',}, ), 
+        ]
+        )
 
 def panel_stat(): # панель с диаграммами
     return html.Div( id=ID_STAT, style={'overflow-y':'auto','height':'95vh','clear':'left'}, )
@@ -131,13 +130,14 @@ def panel_stat(): # панель с диаграммами
 
 def panel_map_control(prices):
     return html.Div(style= {'margin':'5px',},children = [
-                html.Div( dcc.Slider(
-                    id=ID_PRICE, 
-                    min=prices[0], 
-                    max=prices[-1], 
-                    # step=None,
-                    value=prices[-1], 
-                    marks = { p:f'{p:.1f}M' for p in prices },
+                html.Div( 
+                    dcc.RangeSlider(
+                        id=ID_PRICE, 
+                        min=prices[0], 
+                        max=prices[-1], 
+                        # step=None,
+                        value=[prices[0],prices[-1]], 
+                        marks = { p:f'{p:.1f}M' for p in prices },
                     ),
                     style= {'float':'left','width':'80%',}, 
                 ), 
@@ -220,7 +220,7 @@ def convert_data_points(df):  # конвертируем данные геофр
     Input(component_id=ID_NROOM, component_property='value'), # обработчик события "выбор количества комнат"
     Input(component_id=ID_PRICE, component_property='value'), # обработчик события "ограничение цены"
 )
-def update_map(frame_name,nroom,max_price): # обновление меток на карте при изменении параметров поиска
+def update_map(frame_name,nroom,price): # обновление меток на карте при изменении параметров поиска
     layers = [ dl.TileLayer(), ] # базовый слой OSM
 
     data_ = data.drop_duplicates('url') # точки для отображения на карте
@@ -237,10 +237,8 @@ def update_map(frame_name,nroom,max_price): # обновление меток н
         data_ = data_[ data_['nrooms']==nr ] 
         if len(data_)<1: return layers
 
-    mp = float(max_price)
-    if mp>0.: 
-        data_ = data_[ data_['priceM']<=mp ] 
-        if len(data_)<1 : return layers
+    data_ = data_[ data_['priceM'].between(*price) ] 
+    if len(data_)<1 : return layers
 
     # обозначаем точки на карте
     return layers + [ dl.GeoJSON( data=convert_data_points(data_), zoomToBounds=True, cluster=True ), ]
@@ -249,9 +247,8 @@ def update_map(frame_name,nroom,max_price): # обновление меток н
     Output(component_id=ID_PRICE_LABEL, component_property='children'),
     Input(component_id=ID_PRICE, component_property='value'), # обработчик события "ограничение цены"
 )
-def update_price_label(max_price): # обновление меток на карте при изменении района поиска
-    mp = float(max_price)
-    return f'цена до {mp:.1f}M'
+def update_price_label(price): # обновление меток на карте при изменении района поиска
+    return f'цена от {price[0]:.1f}M до {price[1]:.1f}M'
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 
