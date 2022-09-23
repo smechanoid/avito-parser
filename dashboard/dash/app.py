@@ -5,159 +5,236 @@
 # 
 #  Evgeny S. Borisov <parser@mechanoid.su>
 # 
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-from dash import Dash
-from dash import dcc, html, Input, Output
-
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+import os
+import pandas as pd
+import geopandas as gpd
+from shapely.geometry import Polygon
 import plotly.express as px
+from dash import Dash, dcc, html, Input, Output
 import dash_leaflet as dl
 import dash_leaflet.express as dlx
-import geojson
-import geopandas as gpd
-import pandas as pd
-from shapely.geometry import Polygon
 
 pd.options.plotting.backend = 'plotly'
 
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-def load_data(file_path='data/data_flat.pkl'):
-    # cols = ['avito_id','title','adr','latitude','longitude','priceM','nrooms',]
-    data = pd.read_pickle(file_path)
-    data['tooltip'] = data.apply(lambda d: d['title']+' | '+str(d['priceM'])+'M | '+d['adr'],axis=1)
-    data['dt'] = pd.to_datetime( data['ts'].dt.date )
-    return data
+ID_MAP = 'map-area'
+ID_STAT = 'stat-area'
+ID_FRAME = 'frame-select'
+ID_NROOM = 'nroom-select'
+ID_PRICE = 'price-slider'
+ID_PRICE_LABEL = 'price-label'
 
-
-def convert_data(df):
-    # берём объявления с геометкой
-    df = df[ (~df['latitude'].isnull()) ].reset_index(drop=True)
-    # выкидываем 'ущербные' варианты 
-    df = df.query('~(is_studio|is_apartment|is_part|is_auction|is_openspace|is_SNT|is_roof)&(nrooms>0)&(nrooms<4)')
-    return gpd.GeoDataFrame( df, geometry = gpd.points_from_xy( df['longitude'], df['latitude']), crs='epsg:4326', )
-
-    return gdf
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+def load_data(file_path='data/data_flat.pkl'): # загружаем список объявлений
+    df = pd.read_pickle(file_path)
+    df['tooltip'] = df.apply(lambda d: d['title']+' | '+str(d['priceM'])+'M | '+d['adr'],axis=1)
+    df['dt'] = pd.to_datetime( df['ts'].dt.date )
+    return df
 
 
-def load_frames(frames_path='data/frames/'):  # загружаем области поиска
-    frames_index = pd.read_csv(f'{frames_path}/_index.tsv',sep='\t')
-    swap_coo = lambda coo : [ (c[1],c[0]) for c in coo ]
-    df2poly = lambda df : Polygon(swap_coo(df.values))
+def data_filter(df):
+    return df[
+            ~( # выкидываем 'ущербные' варианты
+                df['latitude'].isna()  # берём только объявления с геометкой 
+                |df['is_studio']
+                |df['is_apartment']
+                |df['is_part']
+                |df['is_auction']
+                |df['is_openspace']
+                |df['is_SNT']
+                |df['is_roof']
+            )
+            & df['nrooms'].between(1,3) # ограничиваем количество комнат
+            & (df['priceM']>1.) # ограничиваем цену
+        ].reset_index(drop=True)
+
+
+def convert_geodata(df): # конвертируем геометку
+    return gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df['longitude'],df['latitude']), crs='epsg:4326',)
+
+def load_frames_index(file_path='data/frames/_index.tsv'): # загружаем индекс областей на карте для фильтрации объявлений по району
+    df = pd.read_csv(file_path,sep='\t')
+    fpath = os.path.dirname(file_path)
+    df['geometry_file'] = df['geometry_file'].apply(lambda s: os.path.join(fpath,s))
+    return df
+
+def load_frames(index): # загружаем области поиска
+    swap_coo = lambda coo : [ (c[1],c[0]) for c in coo ] # координаты из яндекс-карт нужно переставлять местами 
     return  gpd.GeoDataFrame([ 
-            { 'area_name':nm, 'geometry': df2poly( pd.read_csv(f'{frames_path}/{f}',header=None) ) } 
-            for nm,f in frames_index.values
-        ],crs='epsg:4326',)
-
-
-def stat(data):
-    return  (
-        data.query('priceM>1.')
-        .groupby(['nrooms','dt'])
-        ['priceM'].describe(percentiles=[.1,.25,.5,.75,.9])
-    )
-
-def plot_stat(stat): 
-    return (
-           (
-                stat['count']
-                    .reset_index()
-                    .rename(columns={'nrooms':'комнаты'})
-                    .pivot(index='dt',columns='комнаты',values='count')
-                    [[1,2,3]]
-                    .plot.bar(barmode='group',title='количество предложений') 
-            ),
-            stat.loc[1,['min','25%','50%']].plot(title='цена на 1к', markers=True), 
-            stat.loc[2,['min','25%','50%']].plot(title='цена на 2к', markers=True),
-            stat.loc[3,['min','25%','50%']].plot(title='цена на 3к', markers=True), 
+            { 
+                'area_name':nm, # название района
+                'geometry': Polygon( swap_coo( pd.read_csv(f,header=None).values ) ) } # собираем полигон по точкам для поля geometry
+            for nm,f in index.values
+        ],
+        crs='epsg:4326', # система координат яндекс-карт
         )
 
+def stat(df): # статистика цен на квартиры сгрупированная по дате и количеству комнат
+    return  df.groupby(['nrooms','dt'])['priceM'].describe(percentiles=[.25,.5,])
+    # return  df.groupby(['nrooms','dt'])['priceM'].describe(percentiles=[.1,.25,.5,.75,.9])
+
+def plot_stat(df_stat): 
+    
+    return [
+        df_stat['count']
+            .reset_index()
+            .rename(columns={'nrooms':'комнаты'})
+            .pivot(index='dt',columns='комнаты',values='count')
+            .plot.bar(barmode='group',title='количество предложений') 
+            ,
+        ] + [
+            df_stat.loc[nr,['min','25%','50%']].plot(title=f'цена на {nr}к', markers=True) 
+            for nr in df_stat.reset_index()['nrooms'].unique()
+        ]        
+           
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+# загружаем данные
+data = convert_geodata( data_filter( load_data() ) ) # фильтрованные объявления с геометкой
+nrooms =  {-1:'- любые -',} | { nr:f'{nr}-комнатные' for nr in sorted(set(data['nrooms']))  }
+frame_index = load_frames_index() # список областей поиска
+area_index = frame_index['place_name'].tolist()
+frames = load_frames(frame_index) # координаты областей поиска
+del frame_index
+
+prices = sorted(
+        set(
+            data.groupby('dt')['priceM']
+            .describe(percentiles=[.01,.05,.1,.25,.5,.75,.95])
+            .drop(columns=['count','mean','std','max','min'])
+            .max()
+        )
+    )
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+# рисуем дашборд
 
-data = convert_data( load_data() )
-frames = load_frames()
+def panel_control(area_index,nrooms): # панель управления
+    return html.Div(style= {'margin':'5px',}, children = [
+                # выбор комнаты
+                html.Div( dcc.Dropdown( options=nrooms, value=-1, id=ID_NROOM,), style= { 'width':'40%','float':'left',}, ),  
+                # выбор района
+                html.Div( dcc.Dropdown( ['- все районы -',] + area_index, '- все районы -', id=ID_FRAME, ), style= {'width':'60%','float':'right',}, ), 
+            ]
+            )
+         
+
+def panel_stat(): # панель с диаграммами
+    return html.Div( id=ID_STAT, style={'overflow-y':'auto','height':'95vh','clear':'left'}, )
+         
+
+def panel_map_control(prices):
+  return html.Div(style= {'margin':'5px',},children = [
+                html.Div( dcc.Slider(
+                    id=ID_PRICE, 
+                    min=prices[0], 
+                    max=prices[-1], 
+                    # step=None,
+                    value=prices[-1], 
+                    marks = { p:f'{p:.1f}M' for p in prices },
+                    ),
+                    style= {'float':'left','width':'80%',}, 
+                ), 
+                html.Div( html.Label(f'цена до {prices[-1]:.1f}M',id=ID_PRICE_LABEL), style= { 'float':'left',}, ),  
+            ],
+            )
 
 
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+def panel_map(prices, map_center_coo=[44.,33.,]): # панель с картой
+    return html.Div(children =[
+            panel_map_control(prices),
+            dl.Map(
+                id=ID_MAP,
+                center=map_center_coo,
+                style={'width':'100%','height':'94vh','margin':'auto','display':'block',},
+                ) 
+            ])
 
 app = Dash()
-
 app.layout = html.Div(
     children=[
-        html.Div(
-            style={ 'width':'40%','float':'left',}, 
-            children=[
-                html.Div(id='frame-text'),
-                dcc.Dropdown( frames['area_name'].tolist()+ ['- все районы -', ], '- все районы -', id='frame-select', ), 
-                html.Div( id='stat-area', style={'overflow-y': 'scroll','height':'95vh'},),
+        html.Div( # левая панель
+            style= { 'width':'40%','float':'left',},
+            children = [
+                panel_control(area_index,nrooms), # панель управления
+                panel_stat(), # панель с диаграммами
                 ]
-         ),
-        html.Div(
-            style={'width':'60%','float':'right',}, 
-            children=[
-                dl.Map(id='map-area',
-                    center = [44.,33.,],    
-                    style = { 'width':'100%', 'height':'98vh', 'margin':'auto', 'display':'block', },
-                    ),
-                ]
-            ),
-       ]
+        ),
+        html.Div( # правая панель
+            style={'width':'60%','float':'right',},
+            children = [
+                panel_map(prices), # правая панель с картой
+            ]
+        )
+    ],
 )
-
-
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+def pack_diagram(fig):
+    legend={'orientation':'h', 'yanchor':'bottom', 'y':1., 'xanchor':'right', 'x':1.}   
+    return dcc.Graph( figure = fig.update_layout( xaxis_tickangle=-45, legend=legend,) )
 
-@app.callback(
-    Output(component_id='stat-area', component_property='children'),
-    Input(component_id='frame-select', component_property='value'),
+@app.callback( # обработчик событий "выбор района и/или количества комнат из списка"
+    Output(component_id=ID_STAT, component_property='children'),
+    Input(component_id=ID_FRAME, component_property='value'),
+    Input(component_id=ID_NROOM, component_property='value'),
 )
-def update_frame(frame_name):
-    frame_ = frames[ frames['area_name']==frame_name ]
+def update_stat(frame_name,nroom): # обновление диаграмм при изменении района поиска
+    frame_ = frames[ frames['area_name']==frame_name ] # координаты района
+    # отрезаем объявления по области на карте
     data_ = data.sjoin( frame_, how='inner', predicate='within') if len(frame_)>0 else data
-    return [ 
-            dcc.Graph( 
-                figure=f.update_layout(
-                    xaxis_tickangle=-45,
-                    legend=dict(
-                        orientation='h',
-                        yanchor='bottom', y=1.,
-                        xanchor='right', x=1.
-                        ),
-                    ) 
-                ) 
-            for f in plot_stat(stat(data_)) 
-            ]
-
-
-@app.callback(
-    Output(component_id='map-area', component_property='children'),
-    Input(component_id='frame-select', component_property='value'),
-)
-def update_map(frame_name):
-    items = [ dl.TileLayer(), ]
-    data_ = data[~data['latitude'].isna()]
-
-    frame_ = frames[ frames['area_name']==frame_name ]
-    if len(frame_)>0: 
-        polygon = dl.Polygon( positions = [ (y,x) for x,y in frame_.iloc[0]['geometry'].exterior.coords ] )
-        items.append( dl.LayerGroup(polygon) )
-        data_ = data_.sjoin( frame_, how='inner', predicate='within')
+    nr = int(nroom)
+    if nr>0: data_ = data_[ data_['nrooms']==nr ] 
+    return [ pack_diagram(f) for f in plot_stat(stat(data_)) ] # рисуем диаграммы
  
-    if len(data_)<1 : return items
- 
-    points = dlx.dicts_to_geojson( 
-            data_[['url','tooltip','latitude','longitude']]
+def convert_frame_geometry(fg): # конвертируем данные геофрейма района в формат карт
+    return dl.Polygon( positions = [ (y,x) for x,y in fg.exterior.coords ] )
+
+def convert_data_points(df):  # конвертируем данные геофрейма позиций в формат карт
+    return dlx.dicts_to_geojson( 
+            df[['url','tooltip','latitude','longitude']]
             .rename(columns={'latitude':'lat','longitude':'lon','url':'name',})
             .T.to_dict().values()
             )
+
+@app.callback( # обработчик события "выбор района из списка"
+    Output(component_id=ID_MAP, component_property='children'),
+    Input(component_id=ID_FRAME, component_property='value'), # обработчик события "выбор района из списка"
+    Input(component_id=ID_NROOM, component_property='value'), # обработчик события "выбор количества комнат"
+    Input(component_id=ID_PRICE, component_property='value'), # обработчик события "ограничение цены"
+)
+def update_map(frame_name,nroom,max_price): # обновление меток на карте при изменении параметров поиска
+    items = [ dl.TileLayer(), ] # базовый слой OSM
+
+    data_ = data.copy() # точки для отображения на карте
+
+    mp = float(max_price)
+    if mp>0.: data_ = data_[ data_['priceM']<=mp ] 
+
+    nr = int(nroom)
+    if nr>0: data_ = data_[ data_['nrooms']==nr ] 
+
+    frame_ = frames[ frames['area_name']==frame_name ] # выбираем район поиска
+    if len(frame_)>0: 
+        # обозначаем район на карте
+        items.append( dl.LayerGroup(  convert_frame_geometry(frame_.iloc[0]['geometry']) ) )
+        # отрезаем объявления по области на карте
+        data_ = data_.sjoin( frame_, how='inner', predicate='within')
  
-    items.append( dl.GeoJSON( data=points, zoomToBounds=True,cluster=True ) )
+    # обозначаем точки на карте
+    if len(data_)<1 : return items
+    items.append( dl.GeoJSON( data=convert_data_points(data_), zoomToBounds=True, cluster=True ) )
 
     return items
 
-
-
+@app.callback( # обработчик события "изменение фильтра цены"
+    Output(component_id=ID_PRICE_LABEL, component_property='children'),
+    Input(component_id=ID_PRICE, component_property='value'), # обработчик события "ограничение цены"
+)
+def update_price_label(max_price): # обновление меток на карте при изменении района поиска
+    mp = float(max_price)
+    return f'цена до {mp:.1f}M'
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 
