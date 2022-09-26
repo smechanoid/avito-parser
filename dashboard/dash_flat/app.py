@@ -14,7 +14,9 @@ import plotly.express as px
 from dash import Dash, dcc, html, Input, Output
 import dash_leaflet as dl
 import dash_leaflet.express as dlx
-
+from dash.dash_table import DataTable
+# import dash_bootstrap_components as dbc
+from dash_bootstrap_components import Table
 pd.options.plotting.backend = 'plotly'
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -25,10 +27,16 @@ ID_FRAME = 'frame-select'
 ID_NROOM = 'nroom-select'
 ID_PRICE = 'price-slider'
 ID_PRICE_LABEL = 'price-label'
+ID_DATA_TABLE = 'data-table'
+DATA_TABLE_PAGE_SIZE = 5
 
 NROOM_DEFAULT = -1
 FRAME_NAME_DEFAULT = '- все -'
+
 # PLACE_DEFAULT = 'sevastopol'
+
+MAP_CENTER_COO = [44.,33.,]
+
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 def load_data(file_path='data/data_flat.pkl'): # загружаем список объявлений
@@ -115,19 +123,6 @@ prices = sorted(
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 # рисуем дашборд
 
-def panel_control(area_index,nrooms): # панель управления
-    return html.Div(style= {'margin':'5px',}, children = [
-            # выбор комнаты
-            html.Div( dcc.Dropdown(id=ID_NROOM, options=nrooms, value=NROOM_DEFAULT,clearable=False), style= { 'width':'40%','float':'left',}, ),  
-            # выбор района
-            html.Div( dcc.Dropdown(id=ID_FRAME, options=[FRAME_NAME_DEFAULT] + area_index, value=FRAME_NAME_DEFAULT,clearable=False ), style= {'width':'60%','float':'right',}, ), 
-        ]
-        )
-
-def panel_stat(): # панель с диаграммами
-    return html.Div( id=ID_STAT, style={'overflow-y':'auto','height':'95vh','clear':'left'}, )
-         
-
 def panel_map_control(prices):
     return html.Div(style= {'margin':'5px',},children = [
                 html.Div( 
@@ -146,32 +141,108 @@ def panel_map_control(prices):
             )
 
 
-def panel_map(prices, map_center_coo=[44.,33.,]): # панель с картой
-    return html.Div(children =[
-            panel_map_control(prices),
-            dl.Map(
-                id=ID_MAP,
-                center=map_center_coo,
-                style={'width':'100%','height':'94vh','margin':'auto','display':'block',},
-                ) 
-            ])
+# def panel_map(prices, map_center_coo=[44.,33.,]): # панель с картой
+#     return html.Div(children =[
+#             panel_map_control(prices),
+#             dl.Map(
+#                 id=ID_MAP,
+#                 center=map_center_coo,
+#                 style={'width':'100%','height':'60vh','margin':'auto','display':'block',},
+#                 ) 
+#             ])
+# 
+
+
+def panel_data_table_cell(cell, is_a):
+    return html.Td( html.A(href=cell,children=[cell], target='blank' ) ) if is_a else html.Td(cell)
+
+def panel_data_table_row(row,cols,cols_a):
+    return html.Tr([  panel_data_table_cell(row[c],c in cols_a) for c in cols ], style={'background-color':'#eee',})
+
+def panel_data_table_header(cols):
+    return html.Tr( [ html.Th(c) for c in cols ], style={'background-color':'#ccc',} )
+
+def panel_data_table(data,cols,cols_a):
+    return html.Table( [ panel_data_table_header(cols), ] + [ panel_data_table_row(r,cols,cols_a)  for r in data ], style={'width':'100%',}, )
+
+
+
+def panel_data(df):
+    TABLE_MAX_ROW = 50
+    cols_d = ['title','adr_orig','priceM'] # ,'description',]
+    cols_a = ['url',]
+    cols = cols_d+cols_a
+    df_ = df if (len(df)<TABLE_MAX_ROW) else df.sort_values(by=['priceM']).head(50)
+    return panel_data_table( df_[cols].to_dict('records'), cols,cols_a)
+
+
+
+# def panel_data(df):
+#     cols_d = ['title','adr','priceM'] #,'description',]
+#     cols_a = ['url',]
+#     return DataTable( 
+#             data=df[cols_d+cols_a].to_dict('records'), 
+#             #columns=[{'name': 'url', 'id': 'url', 'presentation': 'markdown',}],
+#             #markdown_options={'url': True},
+#             page_size=DATA_TABLE_PAGE_SIZE, 
+#             page_current=0,
+#         ) 
+
+# def create_link(url):
+#     return html.A(html.P('Link'), href=url)
+# 
+# def panel_data(df):
+#     cols_d = ['title','adr','priceM'] #,'description',]
+#     cols_a = ['url',]
+#     return Table.from_dataframe(df[cols_d+cols_a].sample(10), striped=False, bordered=False, hover=False)
+
+
+
+# # example with only one column and row
+# data_table = dash_table.DataTable(
+#     id="table",
+#     columns=[{"name": "link", "id": "column_link", "presentation": "markdown"}],
+#     data=[{"html": '<a href="https://www.google.com">Link</a>'}], 
+#     markdown_options={"html": True},
+# )
+
+
 
 app = Dash()
 app.layout = html.Div(
     children=[
-        html.Div( # левая панель
-            style= { 'width':'40%','float':'left',},
-            children = [
-                panel_control(area_index,nrooms), # панель управления
-                panel_stat(), # панель с диаграммами
-                ]
-        ),
-        html.Div( # правая панель
-            style={'width':'60%','float':'right',},
-            children = [
-                panel_map(prices), # правая панель с картой
-            ]
-        )
+        # html.Div( id=ID_DATA_TABLE, style={'background-color':'#0ce','height':'24vh'}, ),
+        html.Div(    
+            children=[
+                html.Div( # левая панель
+                    style= { 'width':'40%','float':'left',},
+                    children = [
+                        html.Div(style= {'margin':'5px',}, children = [
+                            # выбор комнаты
+                            html.Div( dcc.Dropdown(id=ID_NROOM, options=nrooms, value=NROOM_DEFAULT,clearable=False), style= { 'width':'40%','float':'left',}, ),  
+                            # выбор района
+                            html.Div( dcc.Dropdown(id=ID_FRAME, options=[FRAME_NAME_DEFAULT] + area_index, value=FRAME_NAME_DEFAULT,clearable=False ), style= {'width':'60%','float':'right',}, ), 
+                            ]),
+                        # панель с диаграммами
+                        html.Div( id=ID_STAT, style={'overflow-y':'auto','height':'70vh','clear':'left'}, ),
+                        # html.Div( id=ID_DATA_TABLE, style={'overflow-y':'auto','height':'25vh','clear':'left'}, children=[ panel_data(),]),
+                    ]
+                ),
+                html.Div( # правая панель
+                    style={'width':'60%','float':'left',},
+                    children = [
+                        html.Div(children =[
+                        panel_map_control(prices),
+                        dl.Map(
+                            id=ID_MAP,
+                            center=MAP_CENTER_COO,
+                            style={ 'width':'100%', 'height':'70vh', 'margin':'auto', 'display':'block',},
+                            ) 
+                        ])
+                    ]
+                ),
+            ]),
+            html.Div( id=ID_DATA_TABLE, style={'overflow-y':'auto','width':'100%','background-color':'#eee','height':'23vh','clear':'left' }, ),
     ],
 )
 
@@ -249,6 +320,36 @@ def update_map(frame_name,nroom,price): # обновление меток на �
 )
 def update_price_label(price): # обновление меток на карте при изменении района поиска
     return f'цена от {price[0]:.1f}M до {price[1]:.1f}M'
+
+
+
+@app.callback( # обработчик события "выбор района из списка"
+    Output(component_id=ID_DATA_TABLE, component_property='children'),
+    Input(component_id=ID_FRAME, component_property='value'), # обработчик события "выбор района из списка"
+    Input(component_id=ID_NROOM, component_property='value'), # обработчик события "выбор количества комнат"
+    Input(component_id=ID_PRICE, component_property='value'), # обработчик события "ограничение цены"
+)
+def update_data_table(frame_name,nroom,price,): # обновление меток на карте при изменении района поиска
+    data_ = data.drop_duplicates('url') # точки для отображения на карте
+
+    # отрезаем объявления по области на карте
+    if frame_name != FRAME_NAME_DEFAULT:
+        frame_ = frames[ frames['area_name']==frame_name ] # координаты района
+        data_ = data_.sjoin( frame_, how='inner', predicate='within') 
+        if len(data_)<1: return panel_data(data_)
+
+    nr = int(nroom)
+    if nr!=NROOM_DEFAULT: 
+        data_ = data_[ data_['nrooms']==nr ] 
+        if len(data_)<1: return panel_data(data_)
+
+    data_ = data_[ data_['priceM'].between(*price) ] 
+    # if len(data_)<1 : return panel_data(data_)
+
+    # обозначаем точки на карте
+    return panel_data(data_)
+
+
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 
