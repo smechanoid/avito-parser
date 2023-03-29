@@ -91,12 +91,13 @@ class AvitoParserRealty(AvitoParser):
             return tag.find('div',{'data-marker':'item-development-name'}).text
         except:
             return '' 
-           
+
     @staticmethod
     def _parse_item_adr(tag):
         regex_address = re.compile('geo-address-.*')
         try:
-            return tag.find('span',{'class':regex_address}).text
+            return tag.find('div',{'class':regex_address}).text
+            # return tag.find('span',{'class':regex_address}).text
         except:
             return '' 
             
