@@ -53,7 +53,7 @@ class GeocoderOSM(GeocoderSimpleOSM):
 class GeocoderYandex(Geocoder):
     
     def __init__(self,key):
-        self._key=key
+        self._key = key
         super().__init__()
    
     def _get_coo(self,adr):
@@ -79,6 +79,7 @@ class GeocoderYandex(Geocoder):
             logging.error(f'HttpGetRequest: request : {err}')
 
         return None
+
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 class AddressTransformer:
     

@@ -1,2 +1,2 @@
 # avito-parser
-avito parser  
+avito/cian parser  
