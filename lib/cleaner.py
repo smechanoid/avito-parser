@@ -110,10 +110,16 @@ class CleanerLand:
         df['priceM'] = df['price']/1e6
         df['priceMU'] = df['priceM']/df['area']
 
-        area_bins = [ 0., 1., 2., 4., 8., 20., 1e6, ]
-        labels = [ '<1', '1-2','2-4', '4-8', '8-20', '20+' ]
+        #area_bins = [ 0., 1., 2., 4., 8., 20., 1e6, ]
+        #labels = [ '<1', '1-2','2-4', '4-8', '8-20', '20+' ]
         # labels = [ 'tiny', 'small','medium', 'big', 'large', 'huge' ]
-        df['area_size_category'] = pd.cut( df['area'], bins = area_bins, labels=labels)
+        #df['area_size_category'] = pd.cut( df['area'], bins = area_bins, labels=labels)
+
+        df['area_size_category'] = pd.cut( 
+                df['area'], 
+                bins =  [ 0., 1., 2., 4., 8., 12., 20., 1e6, ], 
+                labels = [ '<1', '1-2','2-4', '4-8', '8-12', '12-20', '20+' ],
+        )
 
         return df
 
@@ -168,19 +174,32 @@ class CleanerHouse:
         df['price'] = df['price'].astype(int)
         df['priceM'] = df['price']/1e6
 
-        # [ 'tiny', 'small','medium', 'big', 'large', 'huge' ]
+#        # [ 'tiny', 'small','medium', 'big', 'large', 'huge' ]
+#        df['land_size_category'] = pd.cut( 
+#                df['land_area'], 
+#                bins =  [ 0., 1., 2., 4., 8., 20., 1e6, ], 
+#                labels = [ '<1', '1-2','2-4', '4-8', '8-20', '20+' ],
+#        )
+#        
+#        df['house_size_category'] = pd.cut( 
+#                df['house_area'], 
+#                bins = [ 0., 30., 50., 70., 150., 300., 1e6, ], 
+#                labels = [ '<30', '30-50','50-70', '70-150', '150-300', '300+' ],
+#            )
+
         df['land_size_category'] = pd.cut( 
                 df['land_area'], 
-                bins =  [ 0., 1., 2., 4., 8., 20., 1e6, ], 
-                labels = [ '<1', '1-2','2-4', '4-8', '8-20', '20+' ],
+                bins =  [ 0., 1., 2., 4., 8., 12., 20., 1e6, ], 
+                labels = [ '<1', '1-2','2-4', '4-8', '8-12', '12-20', '20+' ],
         )
-        
+ 
         df['house_size_category'] = pd.cut( 
                 df['house_area'], 
-                bins = [ 0., 30., 50., 70., 150., 300., 1e6, ], 
-                labels = [ '<30', '30-50','50-70', '70-150', '150-300', '300+' ],
+                bins = [ 0., 30., 50., 70., 110., 180., 300., 1e6, ], 
+                labels = [ '<30', '30-50','50-70', '70-110','110-180', '180-300', '300+' ],
             )
         
+ 
         return df
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
