@@ -10,11 +10,11 @@
 # import os
 import logging
 import re
+from datetime import datetime 
+import pandas as pd
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-import pandas as pd
-from datetime import datetime 
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
